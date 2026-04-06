@@ -12,55 +12,54 @@ loop continues to next item
 
 ## Quick start
 
-Open a Claude Code instance in any repo and ask it to run loopwork. All commands below are run from inside Claude Code (via the Bash tool), not in a raw terminal.
+Open Claude Code in any repo and use the `/run` command:
 
-### Option A: Review a PR in another repo
-
-From a Claude Code session, run this script:
-
-```bash
-#!/bin/bash
-set -e
-
-rm -rf /tmp/loopwork-review
-mkdir -p /tmp/loopwork-review
-cd /tmp/loopwork-review
-
-cat > MASTER_PLAN.md << 'EOF'
-# MASTER PLAN: my-project
-
-## Items
-
-### [>] 1. Review PR owner/repo#17
-- **Description**: Review and fix owner/repo#17
-- **Success criteria**:
-  - [ ] No critical issues in Claude + Codex reviews
-  - [ ] All fixes pushed to PR branch
-
-## Global Guardrails
-- Never auto-merge
-
-## Evolution Rules
-- On failure: retry (max 3)
-- On success: mark [x], move on
-EOF
-
-git init && git add -A && git commit -m "init"
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh . --auto
+```
+/run review PR attach-dev/attach-guard#17
+/run build JWT auth with refresh tokens
+/run --status
+/run --tail
+/run --stop
 ```
 
-Save this as a script (e.g. `/tmp/review-pr.sh`) and run `bash /tmp/review-pr.sh` from Claude Code. Replace `owner/repo#17` with your actual PR reference.
+The `/run` command:
+1. Detects your intent (review PR, build features, or use existing plan)
+2. Generates a `MASTER_PLAN.md` automatically
+3. Launches the loop as a **background process** (survives terminal disconnects)
+4. Shows you how to monitor progress
 
-### Option B: Build features in your own repo
+### Examples
 
-1. Create your plan — copy `META_PROMPT.md` contents into ChatGPT along with your brainstorm. It will produce a `MASTER_PLAN.md`. Drop that into your repo root.
+**Review a PR:**
+```
+/run review PR owner/repo#17
+```
 
-2. From Claude Code, run:
+**Build features** (describe what you want):
+```
+/run add user authentication with OAuth2 and session management
+```
+
+**Use an existing plan** (if MASTER_PLAN.md exists):
+```
+/run
+```
+
+**Monitor a running loop:**
+```
+/run --status    # Plan progress + recent log
+/run --tail      # Live log output
+/run --stop      # Stop the loop
+```
+
+### Manual usage
+
+You can also run the loop directly:
 
 ```bash
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo          # Interactive
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo --auto   # Headless (AFK)
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo --status # Check status
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/repo --auto    # Headless
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/repo --status  # Status
+~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh /path/to/repo start  # Background
 ```
 
 ### Steer mid-flight
@@ -68,7 +67,6 @@ Save this as a script (e.g. `/tmp/review-pr.sh`) and run `bash /tmp/review-pr.sh
 **While running:**
 - Edit `MASTER_PLAN.md` directly — add/remove/reorder items
 - Mark items `[>]` (do next), `[skip]`, `[blocked]`
-- In interactive mode, just chat
 
 **Away from keyboard:**
 - Drop a `STEER.md` in the repo root with free-text instructions
@@ -136,10 +134,13 @@ The scope guard hook prevents agents from modifying files outside the current it
 
 ```
 loopwork/
+├── .claude/commands/
+│   └── run.md              # /run slash command for Claude Code
 ├── META_PROMPT.md          # Paste into ChatGPT with your brainstorm
 ├── MASTER_PLAN_TEMPLATE.md # Template → becomes MASTER_PLAN.md
 ├── run.sh                  # Main entry point (Ralph loop)
 ├── lib/
+│   ├── daemon.sh           # Background process lifecycle (start/stop/tail/status)
 │   ├── parse-plan.sh       # Parse MASTER_PLAN.md
 │   ├── scope-check.sh      # Verify changes are in scope
 │   ├── review.sh           # Cross-model review (Claude + Codex)

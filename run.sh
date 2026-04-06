@@ -70,6 +70,14 @@ run_with_timeout() {
   fi
 }
 
+# ─── Notification hook (future: Telegram, Slack, etc.) ───────────────────────
+notify() {
+  local item_number="$1" item_title="$2" status="$3"
+  if [[ -f "${LIB_DIR}/notify.sh" ]]; then
+    bash "${LIB_DIR}/notify.sh" "$REPO_DIR" "$item_number" "$item_title" "$status" || true
+  fi
+}
+
 # ─── Preflight checks ───────────────────────────────────────────────────────
 preflight() {
   local errors=0
@@ -247,12 +255,14 @@ run_iteration() {
       bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "x"
       bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "SUCCESS" \
         "none" "N/A" "Review-fix loop completed for $item_pr_ref" ""
+      notify "$item_number" "$item_title" "SUCCESS"
       echo "SUCCESS" > "$status_file"
     else
       bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "blocked"
       bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "FAILURE" \
         "Review-fix loop could not resolve all issues" "N/A" \
         "PR $item_pr_ref still has issues after max iterations" ""
+      notify "$item_number" "$item_title" "BLOCKED"
       echo "FAILURE" > "$status_file"
     fi
     return 0
@@ -394,6 +404,7 @@ ${item_failures}"
     "none" "N/A" "Completed successfully" "$changed_files"
 
   echo "  Item #${item_number} complete!"
+  notify "$item_number" "$item_title" "SUCCESS"
 
   # Create PR and run reviews (non-blocking)
   if command -v gh &>/dev/null; then
@@ -416,6 +427,15 @@ main() {
 
   if [[ "$MODE" == "--status" ]]; then
     show_status
+    exit 0
+  fi
+
+  if [[ "$MODE" == "--tail" ]]; then
+    if [[ -f "${WORKFLOW_DIR}/loop.log" ]]; then
+      tail -f "${WORKFLOW_DIR}/loop.log"
+    else
+      echo "No log file found. Is the loop running?"
+    fi
     exit 0
   fi
 
