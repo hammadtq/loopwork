@@ -1,0 +1,11 @@
+# Workflow runtime artifacts (generated per-repo, not part of the tool)
+.workflow/
+EVOLUTION_LOG.md
+STEER.md
+STEER_APPLIED_*.md
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
