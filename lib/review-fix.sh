@@ -171,11 +171,13 @@ has_critical_issues() {
   local claude_file="$1"
   local codex_file="$2"
 
-  # Check both review files for CRITICAL findings
-  if grep -qi '\[CRITICAL\]' "$claude_file" 2>/dev/null; then
+  # Check both review files for critical findings
+  # Match multiple formats: [CRITICAL], [P0], [P1], [HIGH], High:
+  local pattern='\[CRITICAL\]|\[P0\]|\[P1\]|\[HIGH\]|^- High:'
+  if grep -qiE "$pattern" "$claude_file" 2>/dev/null; then
     return 0
   fi
-  if grep -qi '\[CRITICAL\]' "$codex_file" 2>/dev/null; then
+  if grep -qiE "$pattern" "$codex_file" 2>/dev/null; then
     return 0
   fi
   return 1
@@ -329,6 +331,22 @@ main() {
 
     echo "  Claude review: $last_claude"
     echo "  Codex review:  $last_codex"
+
+    # Verify at least one review produced output — empty files mean the reviewer failed
+    local claude_size codex_size
+    claude_size=$(wc -c < "$last_claude" 2>/dev/null | tr -d ' ')
+    codex_size=$(wc -c < "$last_codex" 2>/dev/null | tr -d ' ')
+    if [[ "${claude_size:-0}" -eq 0 && "${codex_size:-0}" -eq 0 ]]; then
+      echo "  ERROR: Both reviews produced empty output — reviewers may have failed."
+      echo "  Treating as failure, not clean pass."
+      break
+    fi
+    if [[ "${claude_size:-0}" -eq 0 ]]; then
+      echo "  WARNING: Claude review is empty — reviewer may have failed."
+    fi
+    if [[ "${codex_size:-0}" -eq 0 ]]; then
+      echo "  WARNING: Codex review is empty — reviewer may have failed."
+    fi
 
     # Check for critical issues
     if has_critical_issues "$last_claude" "$last_codex"; then
