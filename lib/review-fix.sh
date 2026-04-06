@@ -166,14 +166,16 @@ $(cat "$diff_file")" \
   echo "$claude_out" "$codex_out"
 }
 
-# ─── Analyze findings — are there critical issues? ───────────────────────────
-has_critical_issues() {
+# ─── Analyze findings — are there actionable issues? ─────────────────────────
+has_actionable_issues() {
   local claude_file="$1"
   local codex_file="$2"
 
-  # Check both review files for critical findings
-  # Match multiple formats: [CRITICAL], [P0], [P1], [HIGH], High:
-  local pattern='\[CRITICAL\]|\[P0\]|\[P1\]|\[HIGH\]|^- High:'
+  # Match any non-trivial finding from either reviewer
+  # Claude formats: [CRITICAL], [WARNING]
+  # Codex formats: [P0], [P1], [P2], [HIGH], [MEDIUM], - High:, - Medium:
+  # Only [INFO], [P3], [LOW], and [CLEAN] are skipped
+  local pattern='\[CRITICAL\]|\[WARNING\]|\[P0\]|\[P1\]|\[P2\]|\[HIGH\]|\[MEDIUM\]|^- High:|^- Medium:'
   if grep -qiE "$pattern" "$claude_file" 2>/dev/null; then
     return 0
   fi
@@ -206,9 +208,9 @@ ${claude_review}
 ${codex_review}
 
 ## Your task:
-1. Fix ALL [CRITICAL] issues from both reviewers
-2. Fix [WARNING] issues if the fix is straightforward and safe
-3. Do NOT fix [INFO] issues — those are informational only
+1. Fix ALL [CRITICAL], [P0], [P1], [HIGH] issues from both reviewers
+2. Fix ALL [WARNING], [P2], [MEDIUM] issues from both reviewers
+3. Do NOT fix [INFO], [P3], [LOW] issues — those are informational only
 4. Do NOT add features, refactor, or make improvements beyond the specific fixes
 5. Commit each fix with a clear message: "review-fix: <what was fixed>"
 
@@ -219,7 +221,7 @@ Begin fixing now.
 PROMPT
 )
 
-  echo "  Fixing critical issues (iteration $iteration)..."
+  echo "  Fixing issues (iteration $iteration)..."
   run_with_timeout "$TIMEOUT" claude -p "$fix_prompt" \
     --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
     --max-turns 30 \
@@ -243,11 +245,16 @@ post_pr_summary() {
   local iterations="$5"
   local clean="$6"
 
+  local fix_count="${7:-0}"
+
   local status_emoji="🔍"
   local status_text="Review complete — manual review recommended"
-  if [[ "$clean" == "true" ]]; then
+  if [[ "$clean" == "true" && "$fix_count" -gt 0 ]]; then
     status_emoji="✅"
-    status_text="All critical issues resolved"
+    status_text="All issues resolved (${fix_count} fix commit(s) pushed)"
+  elif [[ "$clean" == "true" ]]; then
+    status_emoji="✅"
+    status_text="No issues found"
   fi
 
   local body
@@ -348,9 +355,9 @@ main() {
       echo "  WARNING: Codex review is empty — reviewer may have failed."
     fi
 
-    # Check for critical issues
-    if has_critical_issues "$last_claude" "$last_codex"; then
-      echo "  Critical issues found — fixing..."
+    # Check for actionable issues (anything above INFO)
+    if has_actionable_issues "$last_claude" "$last_codex"; then
+      echo "  Issues found — fixing..."
       fix_issues "$last_claude" "$last_codex" "$iteration"
 
       # Push fixes
@@ -362,7 +369,7 @@ main() {
 
       echo "  Fixes pushed — re-reviewing..."
     else
-      echo "  No critical issues — review clean!"
+      echo "  No actionable issues — review clean!"
       is_clean="true"
       break
     fi
@@ -384,7 +391,7 @@ main() {
   echo ""
   echo "  Posting review summary to PR..."
   local summary
-  summary=$(post_pr_summary "$repo" "$pr_number" "$last_claude" "$last_codex" "$iteration" "$is_clean")
+  summary=$(post_pr_summary "$repo" "$pr_number" "$last_claude" "$last_codex" "$iteration" "$is_clean" "$fix_commits")
 
   # NOTE: Never auto-merge. Merging is always a human action.
   # The loop posts the review, marks the item done, and moves on.
