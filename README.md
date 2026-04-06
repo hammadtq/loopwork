@@ -40,6 +40,27 @@ Copy `META_PROMPT.md` contents into ChatGPT along with your brainstorm. It will 
 - Drop a `STEER.md` in the repo root with free-text instructions
 - (Coming soon) Send Telegram messages to steer via Claude Code Channels
 
+## Item types
+
+### Build items (default)
+Standard implementation tasks. The loop runs Claude Code to build, then reviews.
+
+### Review items (auto-detected)
+Any item with a PR ref (`owner/repo#N`) in its description triggers the review-fix loop:
+
+```markdown
+### [ ] 4. Review PR attach-dev/attach-guard#17
+- **Description**: Review and fix attach-dev/attach-guard#17
+```
+
+The loop will:
+1. Checkout the PR branch
+2. Run Claude + Codex reviews **in parallel**
+3. Auto-fix critical issues
+4. Re-review until clean (max 5 iterations)
+5. Push fixes and post summary to PR
+6. Move to the next item — no waiting
+
 ## Plan format
 
 Items in `MASTER_PLAN.md` use status markers:
@@ -89,6 +110,7 @@ loopwork/
 │   ├── parse-plan.sh       # Parse MASTER_PLAN.md
 │   ├── scope-check.sh      # Verify changes are in scope
 │   ├── review.sh           # Cross-model review (Claude + Codex)
+│   ├── review-fix.sh       # Review-fix-resubmit loop for PRs
 │   ├── pr.sh               # Create PR + notify
 │   ├── worktree.sh         # Git worktree management
 │   ├── steer.sh            # STEER.md hotfile handling

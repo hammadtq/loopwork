@@ -204,12 +204,38 @@ run_iteration() {
   local item_forbidden="${ITEM_FORBIDDEN:-}"
   local item_criteria="${ITEM_CRITERIA:-}"
   local item_dependencies="${ITEM_DEPENDENCIES:-}"
+  local item_type="${ITEM_TYPE:-build}"
+  local item_pr_ref="${ITEM_PR_REF:-}"
 
   echo ""
   echo "┌─────────────────────────────────────────────────┐"
   echo "│  Item #${item_number}: ${item_title}"
+  echo "│  Type: ${item_type}${item_pr_ref:+ (${item_pr_ref})}"
   echo "│  Scope: ${item_scope}"
   echo "└─────────────────────────────────────────────────┘"
+
+  # ─── REVIEW items: delegate to review-fix loop ─────────────────────────
+  if [[ "$item_type" == "review" && -n "$item_pr_ref" ]]; then
+    bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "wip"
+
+    echo "  Running review-fix loop for $item_pr_ref..."
+    local review_workdir="${WORKFLOW_DIR}/review-${item_number}"
+    mkdir -p "$review_workdir"
+
+    if bash "${LIB_DIR}/review-fix.sh" "$item_pr_ref" "$review_workdir" 5; then
+      bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "x"
+      bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "SUCCESS" \
+        "none" "N/A" "Review-fix loop completed for $item_pr_ref" ""
+      echo "SUCCESS" > "$status_file"
+    else
+      bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "blocked"
+      bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "FAILURE" \
+        "Review-fix loop could not resolve all issues" "N/A" \
+        "PR $item_pr_ref still has issues after max iterations" ""
+      echo "FAILURE" > "$status_file"
+    fi
+    return 0
+  fi
 
   # Check for scope overlap with active worktrees
   local overlap

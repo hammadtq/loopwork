@@ -95,6 +95,21 @@ extract_item() {
   local milestone
   milestone=$(sed -n "$((start_line - 3)),$((start_line - 1))p" "$plan" | grep '<!-- milestone:' | sed 's/.*<!-- milestone: \(.*\) -->.*/\1/' || echo "")
 
+  # Detect item type: "review" if description contains a PR ref (owner/repo#N or #N)
+  local item_type="build"
+  local pr_ref=""
+  if echo "$description" | grep -qE '(^|[[:space:]])(review|Review):?[[:space:]]'; then
+    item_type="review"
+  fi
+  # Extract PR ref from description: owner/repo#N or just #N
+  pr_ref=$(echo "$description" | grep -oE '[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+#[0-9]+' | head -1 || true)
+  if [[ -z "$pr_ref" ]]; then
+    pr_ref=$(echo "$description" | grep -oE '#[0-9]+' | head -1 || true)
+  fi
+  if [[ -n "$pr_ref" ]]; then
+    item_type="review"
+  fi
+
   # Output as safely quoted key=value pairs using printf %q to prevent injection
   printf 'ITEM_NUMBER=%q\n' "$item_number"
   printf 'ITEM_TITLE=%q\n' "$title"
@@ -105,6 +120,8 @@ extract_item() {
   printf 'ITEM_CRITERIA=%q\n' "$criteria"
   printf 'ITEM_DEPENDENCIES=%q\n' "$dependencies"
   printf 'ITEM_MILESTONE=%q\n' "$milestone"
+  printf 'ITEM_TYPE=%q\n' "$item_type"
+  printf 'ITEM_PR_REF=%q\n' "$pr_ref"
 }
 
 # ─── Mark an item with a new status ──────────────────────────────────────────

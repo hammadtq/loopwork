@@ -59,6 +59,22 @@
   - [ ] {Testable condition}
 - **Dependencies**: Item 1, Item 2
 
+### [ ] 4. Review PR attach-dev/attach-guard#17
+- **Description**: Review and fix attach-dev/attach-guard#17
+- **Success criteria**:
+  - [ ] No critical issues in Claude + Codex reviews
+  - [ ] All fixes pushed to PR branch
+
+<!-- 
+  REVIEW ITEMS: Any item with a PR ref (owner/repo#N) in its description
+  is automatically detected as a review item. The loop will:
+  1. Checkout the PR branch
+  2. Run Claude + Codex reviews in parallel
+  3. Auto-fix critical issues
+  4. Re-review until clean (max 5 iterations)
+  5. Push fixes and post summary to PR
+-->
+
 <!-- Add more items as you iterate. This seeds direction, not the full scope. -->
 
 ## Global Guardrails
