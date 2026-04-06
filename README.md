@@ -1,6 +1,6 @@
-# Workflow Automation
+# Loopwork
 
-A Ralph-loop-based orchestrator for autonomous multi-agent coding workflows. Uses Claude Code + Codex for building, reviewing, and shipping code with human-in-the-loop steering.
+A Ralph-loop orchestrator for autonomous multi-agent coding workflows. Uses Claude Code + Codex for building, reviewing, and shipping code with human-in-the-loop steering.
 
 ## How it works
 
@@ -12,33 +12,66 @@ loop continues to next item
 
 ## Quick start
 
-### 1. Create your plan
+Open a Claude Code instance in any repo and ask it to run loopwork. All commands below are run from inside Claude Code (via the Bash tool), not in a raw terminal.
 
-Copy `META_PROMPT.md` contents into ChatGPT along with your brainstorm. It will produce a `MASTER_PLAN.md`. Drop that file into your project repo root.
+### Option A: Review a PR in another repo
 
-### 2. Run the loop
+From a Claude Code session, run this script:
 
 ```bash
-# Interactive — you're at the keyboard, chatting with the agent
-./run.sh /path/to/your/repo
+#!/bin/bash
+set -e
 
-# Headless — you're AFK, loop runs autonomously
-./run.sh /path/to/your/repo --auto
+rm -rf /tmp/loopwork-review
+mkdir -p /tmp/loopwork-review
+cd /tmp/loopwork-review
 
-# Check status
-./run.sh /path/to/your/repo --status
+cat > MASTER_PLAN.md << 'EOF'
+# MASTER PLAN: my-project
+
+## Items
+
+### [>] 1. Review PR owner/repo#17
+- **Description**: Review and fix owner/repo#17
+- **Success criteria**:
+  - [ ] No critical issues in Claude + Codex reviews
+  - [ ] All fixes pushed to PR branch
+
+## Global Guardrails
+- Never auto-merge
+
+## Evolution Rules
+- On failure: retry (max 3)
+- On success: mark [x], move on
+EOF
+
+git init && git add -A && git commit -m "init"
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh . --auto
 ```
 
-### 3. Steer mid-flight
+Save this as a script (e.g. `/tmp/review-pr.sh`) and run `bash /tmp/review-pr.sh` from Claude Code. Replace `owner/repo#17` with your actual PR reference.
 
-**At the terminal:**
+### Option B: Build features in your own repo
+
+1. Create your plan — copy `META_PROMPT.md` contents into ChatGPT along with your brainstorm. It will produce a `MASTER_PLAN.md`. Drop that into your repo root.
+
+2. From Claude Code, run:
+
+```bash
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo          # Interactive
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo --auto   # Headless (AFK)
+~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/your/repo --status # Check status
+```
+
+### Steer mid-flight
+
+**While running:**
 - Edit `MASTER_PLAN.md` directly — add/remove/reorder items
 - Mark items `[>]` (do next), `[skip]`, `[blocked]`
 - In interactive mode, just chat
 
 **Away from keyboard:**
 - Drop a `STEER.md` in the repo root with free-text instructions
-- (Coming soon) Send Telegram messages to steer via Claude Code Channels
 
 ## Item types
 

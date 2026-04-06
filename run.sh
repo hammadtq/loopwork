@@ -43,11 +43,32 @@ mkdir -p "$WORKFLOW_DIR"
 
 # ─── Cleanup on exit ────────────────────────────────────────────────────────
 cleanup() {
-  for pid in "${BG_PIDS[@]}"; do
+  for pid in "${BG_PIDS[@]+"${BG_PIDS[@]}"}"; do
     kill "$pid" 2>/dev/null || true
   done
 }
 trap cleanup EXIT INT TERM
+
+# ─── Portable timeout (macOS lacks coreutils timeout) ────────────────────────
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout &>/dev/null; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout &>/dev/null; then
+    gtimeout "$secs" "$@"
+  else
+    # Fallback: run in background, kill after timeout
+    "$@" &
+    local pid=$!
+    (sleep "$secs" && kill "$pid" 2>/dev/null) &
+    local watchdog=$!
+    wait "$pid" 2>/dev/null
+    local ret=$?
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    return $ret
+  fi
+}
 
 # ─── Preflight checks ───────────────────────────────────────────────────────
 preflight() {
@@ -160,13 +181,13 @@ json.dump({'allowed': sys.argv[1], 'forbidden': sys.argv[2]}, open(sys.argv[3], 
 }
 
 # ─── Parse item fields safely (no eval) ─────────────────────────────────────
-# Reads printf %q-quoted key=value lines and sets variables via declare
+# Reads printf %q-quoted key=value lines and sets variables via eval
 parse_item_fields() {
   local input="$1"
   while IFS='=' read -r key value; do
     [[ -z "$key" ]] && continue
-    # Values are already printf %q quoted, so eval is safe for declare
-    eval "declare -g $key=$value"
+    # Values are already printf %q quoted, so eval is safe
+    eval "$key=$value"
   done <<< "$input"
 }
 
@@ -283,7 +304,7 @@ ${item_failures}"
   if [[ "$auto_mode" == "--auto" ]]; then
     echo "  Running Claude Code (headless, timeout ${TIMEOUT}s)..."
     pushd "$worktree_path" > /dev/null
-    timeout "$TIMEOUT" claude -p "$prompt" \
+    run_with_timeout "$TIMEOUT" claude -p "$prompt" \
       --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
       --max-turns "$MAX_TURNS" \
       --output-format text > "${WORKFLOW_DIR}/output_item_${item_number}.txt" 2>&1 || claude_exit=$?
@@ -400,7 +421,7 @@ main() {
 
   echo ""
   echo "╔═══════════════════════════════════════════════════╗"
-  echo "║  WORKFLOW AUTOMATION — Ralph Loop                 ║"
+  echo "║  LOOPWORK — Ralph Loop                            ║"
   echo "║  Mode: $(printf '%-42s' "$MODE")║"
   echo "║  Repo: $(printf '%-42s' "$(basename "$REPO_DIR")")║"
   echo "╚═══════════════════════════════════════════════════╝"

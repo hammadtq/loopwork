@@ -76,13 +76,13 @@ extract_item() {
   item_number=$(echo "$block" | head -1 | sed 's/^### \[[^]]*\] //' | grep -o '^[0-9]*' || echo "0")
 
   local description
-  description=$(echo "$block" | grep '^\- \*\*Description\*\*' | sed 's/^- \*\*Description\*\*: //')
+  description=$(echo "$block" | grep '^\- \*\*Description\*\*' | sed 's/^- \*\*Description\*\*: //' || true)
 
   local scope
-  scope=$(echo "$block" | grep '^\- \*\*Scope\*\*' | sed 's/^- \*\*Scope\*\*: //' | tr -d '`')
+  scope=$(echo "$block" | grep '^\- \*\*Scope\*\*' | sed 's/^- \*\*Scope\*\*: //' | tr -d '`' || true)
 
   local forbidden
-  forbidden=$(echo "$block" | grep '^\- \*\*Forbidden\*\*' | sed 's/^- \*\*Forbidden\*\*: //' | tr -d '`')
+  forbidden=$(echo "$block" | grep '^\- \*\*Forbidden\*\*' | sed 's/^- \*\*Forbidden\*\*: //' | tr -d '`' || true)
 
   # Extract success criteria (lines starting with "  - [ ]")
   local criteria
@@ -152,13 +152,13 @@ count_items() {
   local plan="$PLAN_FILE"
   local total done todo wip blocked skipped priority
 
-  total=$(grep -c '^### \[' "$plan" || echo 0)
-  done=$(grep -c '^### \[x\]' "$plan" || echo 0)
-  todo=$(grep -c '^### \[ \]' "$plan" || echo 0)
-  wip=$(grep -c '^### \[wip\]' "$plan" || echo 0)
-  blocked=$(grep -c '^### \[blocked\]' "$plan" || echo 0)
-  skipped=$(grep -c '^### \[skip\]' "$plan" || echo 0)
-  priority=$(grep -c '^### \[>\]' "$plan" || echo 0)
+  total=$(grep -c '^### \[' "$plan" 2>/dev/null || true)
+  done=$(grep -c '^### \[x\]' "$plan" 2>/dev/null || true)
+  todo=$(grep -c '^### \[ \]' "$plan" 2>/dev/null || true)
+  wip=$(grep -c '^### \[wip\]' "$plan" 2>/dev/null || true)
+  blocked=$(grep -c '^### \[blocked\]' "$plan" 2>/dev/null || true)
+  skipped=$(grep -c '^### \[skip\]' "$plan" 2>/dev/null || true)
+  priority=$(grep -c '^### \[>\]' "$plan" 2>/dev/null || true)
 
   echo "TOTAL=${total} DONE=${done} TODO=${todo} WIP=${wip} BLOCKED=${blocked} SKIPPED=${skipped} PRIORITY=${priority}"
 }

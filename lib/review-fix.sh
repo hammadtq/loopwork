@@ -17,13 +17,31 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ─── Portable timeout (macOS lacks coreutils timeout) ────────────────────────
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout &>/dev/null; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout &>/dev/null; then
+    gtimeout "$secs" "$@"
+  else
+    "$@" &
+    local pid=$!
+    (sleep "$secs" && kill "$pid" 2>/dev/null) &
+    local watchdog=$!
+    wait "$pid" 2>/dev/null
+    local ret=$?
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
+    return $ret
+  fi
+}
+
 PR_REF="${1:?Usage: review-fix.sh <owner/repo#N> <workdir> [max-iterations]}"
 WORK_DIR="${2:?Work directory required}"
 MAX_ITERATIONS="${3:-5}"
-REVIEW_DIR="${WORK_DIR}/.workflow/reviews"
+REVIEW_DIR="${WORK_DIR}/.loopwork-reviews"
 TIMEOUT="${WORKFLOW_TIMEOUT:-600}"
-
-mkdir -p "$REVIEW_DIR"
 
 # ─── Parse PR reference ──────────────────────────────────────────────────────
 parse_pr_ref() {
@@ -53,17 +71,17 @@ checkout_pr() {
   if [[ -n "$repo" ]]; then
     # Remote repo — clone if needed
     if [[ ! -d ".git" ]]; then
-      gh repo clone "$repo" . 2>/dev/null || {
+      gh repo clone "$repo" . >/dev/null 2>&1 || {
         echo "ERROR: Failed to clone $repo" >&2
         return 1
       }
     fi
-    gh pr checkout "$pr_number" --repo "$repo" 2>/dev/null || {
+    gh pr checkout "$pr_number" --repo "$repo" >/dev/null 2>&1 || {
       echo "ERROR: Failed to checkout PR #$pr_number from $repo" >&2
       return 1
     }
   else
-    gh pr checkout "$pr_number" 2>/dev/null || {
+    gh pr checkout "$pr_number" >/dev/null 2>&1 || {
       echo "ERROR: Failed to checkout PR #$pr_number" >&2
       return 1
     }
@@ -105,7 +123,7 @@ run_reviews() {
   # Claude review
   if command -v claude &>/dev/null; then
     (
-      timeout "$TIMEOUT" claude -p "You are a staff engineer doing a pre-merge code review.
+      run_with_timeout "$TIMEOUT" claude -p "You are a staff engineer doing a pre-merge code review.
 
 Review this diff. For each finding, output in this EXACT format:
 [CRITICAL] file:line — description
@@ -179,10 +197,10 @@ fix_issues() {
   fix_prompt=$(cat <<PROMPT
 You are fixing code review findings. Two reviewers (Claude and Codex) independently reviewed this code.
 
-## Claude's findings:
+## Claude findings:
 ${claude_review}
 
-## Codex's findings:
+## Codex findings:
 ${codex_review}
 
 ## Your task:
@@ -192,7 +210,7 @@ ${codex_review}
 4. Do NOT add features, refactor, or make improvements beyond the specific fixes
 5. Commit each fix with a clear message: "review-fix: <what was fixed>"
 
-If both reviewers flagged the same issue, it's high confidence — fix it first.
+If both reviewers flagged the same issue, that is high confidence — fix it first.
 If only one reviewer flagged it, use your judgment but err on the side of fixing.
 
 Begin fixing now.
@@ -200,7 +218,7 @@ PROMPT
 )
 
   echo "  Fixing critical issues (iteration $iteration)..."
-  timeout "$TIMEOUT" claude -p "$fix_prompt" \
+  run_with_timeout "$TIMEOUT" claude -p "$fix_prompt" \
     --allowedTools "Read,Edit,Write,Bash,Glob,Grep" \
     --max-turns 30 \
     --output-format text > "${REVIEW_DIR}/fix_iter${iteration}.txt" 2>&1 || true
@@ -274,11 +292,19 @@ main() {
   echo "│  Max iterations: ${MAX_ITERATIONS}"
   echo "└─────────────────────────────────────────────────┘"
 
-  # Checkout PR
+  # Checkout PR (clone into empty WORK_DIR first, then create review dirs)
   echo "  Checking out PR..."
+  local checkout_result
+  checkout_result=$(checkout_pr "$repo" "$pr_number") || {
+    echo "  ERROR: Failed to checkout PR. Aborting review." >&2
+    return 1
+  }
   local branch base_branch
-  read -r branch base_branch <<< "$(checkout_pr "$repo" "$pr_number")"
+  read -r branch base_branch <<< "$checkout_result"
   echo "  Branch: $branch (base: $base_branch)"
+
+  # Create review output directory after clone so it does not interfere
+  mkdir -p "$REVIEW_DIR"
 
   local iteration=0
   local is_clean="false"
