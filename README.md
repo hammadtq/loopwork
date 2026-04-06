@@ -5,8 +5,9 @@ A Ralph-loop orchestrator for autonomous multi-agent coding workflows. Uses Clau
 ## How it works
 
 ```
-You brainstorm (ChatGPT) → MASTER_PLAN.md → Ralph loop picks up items →
-Claude Code builds (worktree) → Codex reviews → PR created → you approve on phone →
+/run "build X" or "review PR Y" → MASTER_PLAN.md generated →
+Ralph loop picks up items → Claude Code builds (worktree) →
+Codex reviews → PR created → you approve on phone →
 loop continues to next item
 ```
 
@@ -87,7 +88,7 @@ Any item with a PR ref (`owner/repo#N`) in its description triggers the review-f
 The loop will:
 1. Checkout the PR branch
 2. Run Claude + Codex reviews **in parallel**
-3. Auto-fix critical issues
+3. Auto-fix actionable issues (critical + warnings)
 4. Re-review until clean (max 5 iterations)
 5. Push fixes and post summary to PR
 6. Move to the next item — no waiting
@@ -161,5 +162,7 @@ loopwork/
 - [x] Slice 2: Ralph loop (bash, interactive + headless)
 - [x] Slice 3: Non-blocking PR + cross-model review
 - [x] Slice 4: Scope drift hook
-- [ ] Slice 5: Telegram integration (Claude Code Channels)
-- [ ] Slice 6: Self-evolution (AutoAgent pattern)
+- [x] Slice 5: `/run` slash command + background daemon
+- [x] Slice 6: Review-fix loop (fix all actionable issues, not just critical)
+- [ ] Slice 7: Telegram integration (notify on completion/failure)
+- [ ] Slice 8: Self-evolution (AutoAgent pattern)
