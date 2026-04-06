@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# loopwork — entry point for the loopwork orchestrator.
-# Delegates to run.sh in the same directory.
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "${SCRIPT_DIR}/run.sh" "$@"
