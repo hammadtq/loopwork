@@ -71,7 +71,7 @@ The scope guard hook prevents agents from modifying files outside the current it
       "matcher": "Edit|Write",
       "hooks": [{
         "type": "command",
-        "command": "/path/to/workflow-automation/hooks/scope-guard.sh"
+        "command": "/path/to/loopwork/hooks/scope-guard.sh"
       }]
     }]
   }
@@ -81,7 +81,7 @@ The scope guard hook prevents agents from modifying files outside the current it
 ## File structure
 
 ```
-workflow-automation/
+loopwork/
 ├── META_PROMPT.md          # Paste into ChatGPT with your brainstorm
 ├── MASTER_PLAN_TEMPLATE.md # Template → becomes MASTER_PLAN.md
 ├── run.sh                  # Main entry point (Ralph loop)
