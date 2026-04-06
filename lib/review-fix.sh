@@ -330,19 +330,34 @@ main() {
     echo "  Manual review needed."
   fi
 
+  # Count how many fix commits were pushed
+  pushd "$WORK_DIR" > /dev/null
+  local fix_commits
+  fix_commits=$(git log --oneline "${base_branch}..HEAD" --grep="review-fix" 2>/dev/null | wc -l | tr -d ' ')
+  popd > /dev/null
+
   # Post summary to PR
   echo ""
   echo "  Posting review summary to PR..."
   local summary
   summary=$(post_pr_summary "$repo" "$pr_number" "$last_claude" "$last_codex" "$iteration" "$is_clean")
 
+  # NOTE: Never auto-merge. Merging is always a human action.
+  # The loop posts the review, marks the item done, and moves on.
+  # Human merges via GitHub UI, Telegram, or CLI when ready.
+
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "  REVIEW-FIX COMPLETE"
+  echo "  PR:         https://github.com/${repo}/pull/${pr_number}"
   echo "  Iterations: ${iteration}"
-  echo "  Clean: ${is_clean}"
-  echo "  PR: https://github.com/${repo}/pull/${pr_number}"
+  echo "  Clean:      ${is_clean}"
+  echo "  Fixes:      ${fix_commits} commit(s) pushed"
+  echo "  Status:     WAITING FOR YOUR MERGE"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "  → Review the PR and merge when ready."
+  echo "  → The loop has already moved on to the next item."
 }
 
 main
