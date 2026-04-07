@@ -10,9 +10,15 @@ You are launching the loopwork orchestration loop. Loopwork runs Claude Code + C
 
 ## Setup
 
-- **LOOPWORK_DIR**: `~/go/src/github.com/hammadtq/attach-dev/loopwork`
+- **LOOPWORK_DIR**: must be set in the environment to the absolute path of the loopwork checkout. If `$LOOPWORK_DIR` is unset, fall back to these candidates in order and use the first that exists:
+  1. `$HOME/loopwork`
+  2. `$HOME/src/loopwork`
+  3. `$HOME/go/src/github.com/hammadtq/attach-dev/loopwork`
+  If none exist, STOP and tell the user: `LOOPWORK_DIR is not set and loopwork was not found in any default location. Run: export LOOPWORK_DIR=/path/to/loopwork`
 - **WORKING_DIR**: The current working directory (`$PWD`) — this is the repo being operated on
-- **DAEMON**: `bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh`
+- **DAEMON**: `bash "$LOOPWORK_DIR/lib/daemon.sh"`
+
+When you run any of the bash snippets below, always quote `"$LOOPWORK_DIR"` so paths with spaces work.
 
 ## Step 1: Parse arguments
 
@@ -21,15 +27,15 @@ The user input is: `$ARGUMENTS`
 Determine the intent:
 
 ### If `--status`:
-Run: `bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh "$PWD" status`
+Run: `bash "$LOOPWORK_DIR/lib/daemon.sh" "$PWD" status`
 Show the output to the user. Done.
 
 ### If `--stop`:
-Run: `bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh "$PWD" stop`
+Run: `bash "$LOOPWORK_DIR/lib/daemon.sh" "$PWD" stop`
 Show the output to the user. Done.
 
 ### If `--tail`:
-Run: `timeout 30 bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh "$PWD" tail` or use the portable run_with_timeout if timeout is not available.
+Run: `timeout 30 bash "$LOOPWORK_DIR/lib/daemon.sh" "$PWD" tail` (or use the portable run_with_timeout if `timeout` is not available).
 Show the output. Done.
 
 ### If it contains a PR reference (pattern: `owner/repo#N` or `#N`):
@@ -39,7 +45,7 @@ This is a **review request**. Go to Step 2A.
 This is a **build request**. Go to Step 2B.
 
 ### If empty and MASTER_PLAN.md exists in the working directory:
-Show the user a summary of the existing plan (run `bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/parse-plan.sh "$PWD/MASTER_PLAN.md" count`). Ask: "Launch the loop with this plan?"
+Show the user a summary of the existing plan (run `bash "$LOOPWORK_DIR/lib/parse-plan.sh" "$PWD/MASTER_PLAN.md" count`). Ask: "Launch the loop with this plan?"
 If yes, go to Step 3.
 
 ### If empty and no MASTER_PLAN.md:
@@ -140,15 +146,13 @@ Use this exact format:
 - On success: mark [x], move on
 ```
 
-**Show the generated plan to the user and ask for confirmation before proceeding.**
-
-Write the MASTER_PLAN.md to the working directory. Then go to Step 3.
+Write the MASTER_PLAN.md to the working directory and proceed straight to Step 3 — do not ask for confirmation. The user invoked `/run` precisely so they can walk away. If you have genuine architectural ambiguity, STOP and ask; otherwise launch.
 
 ## Step 3: Launch the loop
 
 Run the daemon to start the loop in the background:
 ```bash
-bash ~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh "$PWD" start
+bash "$LOOPWORK_DIR/lib/daemon.sh" "$PWD" start
 ```
 
 Wait 3 seconds, then show initial progress:

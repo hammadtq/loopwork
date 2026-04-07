@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# pr.sh — Create PR, run cross-model review, notify human.
-# Called after an item (or milestone) passes self-assessment.
+# pr.sh — Create a PR for a finished item.
+#
+# Note: this script no longer runs reviews itself. The caller (run.sh) is
+# expected to invoke review-fix.sh against the resulting PR so that review
+# results actually gate the item's completion and get posted as a PR comment.
 
 set -euo pipefail
 
@@ -29,7 +32,6 @@ create_pr() {
   lines_added=$(git diff --stat "${BASE_BRANCH}...HEAD" | tail -1 | grep -o '[0-9]* insertion' | grep -o '[0-9]*' || echo "0")
   lines_removed=$(git diff --stat "${BASE_BRANCH}...HEAD" | tail -1 | grep -o '[0-9]* deletion' | grep -o '[0-9]*' || echo "0")
 
-  # Create PR
   local pr_url
   pr_url=$(gh pr create \
     --title "Item ${ITEM_NUMBER}: ${ITEM_TITLE}" \
@@ -56,38 +58,9 @@ EOF
   echo "$pr_url"
 }
 
-# ─── Run reviews in background ──────────────────────────────────────────────
-run_reviews() {
-  local review_file
-  review_file=$("${SCRIPT_DIR}/review.sh" "$REPO_DIR" "$BASE_BRANCH")
-  echo "$review_file"
-}
-
-# ─── Notify human (placeholder — Telegram integration comes later) ───────────
-notify_human() {
-  local pr_url="$1"
-  local review_file="$2"
-
-  # For now, just print to terminal
-  echo ""
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "  PR READY FOR REVIEW"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "  Item:   #${ITEM_NUMBER} — ${ITEM_TITLE}"
-  echo "  PR:     ${pr_url}"
-  echo "  Review: ${review_file}"
-  echo "━━━━━━━━━━━━━━━━━��━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo ""
-
-  # TODO: Slice 5 — Send via Telegram
-  # telegram_send "PR ready: ${pr_url}\nItem: #${ITEM_NUMBER} — ${ITEM_TITLE}\nReview: see attached"
-}
-
-# ─── Main ────────────────────────────────────────────────────────────────────
 main() {
   echo "Creating PR for item ${ITEM_NUMBER}..." >&2
 
-  # Create PR
   local pr_url
   pr_url=$(create_pr)
 
@@ -98,14 +71,7 @@ main() {
 
   echo "PR created: $pr_url" >&2
 
-  # Run reviews (non-blocking — the loop will continue to next item)
-  local review_file
-  review_file=$(run_reviews)
-
-  # Notify
-  notify_human "$pr_url" "$review_file"
-
-  # Output PR URL for the loop
+  # Output PR URL on stdout (last line) so the caller can parse it.
   echo "$pr_url"
 }
 

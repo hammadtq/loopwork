@@ -70,7 +70,8 @@ if [[ -n "$FORBIDDEN" ]]; then
     pattern="${pattern#"${pattern%%[![:space:]]*}"}"  # trim leading whitespace
     pattern="${pattern%"${pattern##*[![:space:]]}"}"  # trim trailing whitespace
     [[ -z "$pattern" ]] && continue
-    if [[ "$REL_PATH" == "$pattern" || "$REL_PATH" == ${pattern}* ]]; then
+    pattern="${pattern%/}"
+    if [[ "$REL_PATH" == "$pattern" || "$REL_PATH" == "${pattern}/"* ]]; then
       cat <<EOF
 {
   "permissionDecision": "deny",
@@ -90,7 +91,8 @@ if [[ -n "$ALLOWED" && "$ALLOWED" != "any" ]]; then
     pattern="${pattern#"${pattern%%[![:space:]]*}"}"
     pattern="${pattern%"${pattern##*[![:space:]]}"}"
     [[ -z "$pattern" ]] && continue
-    if [[ "$REL_PATH" == ${pattern}* ]]; then
+    pattern="${pattern%/}"
+    if [[ "$REL_PATH" == "$pattern" || "$REL_PATH" == "${pattern}/"* ]]; then
       is_allowed=true
       break
     fi

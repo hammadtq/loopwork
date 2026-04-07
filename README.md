@@ -53,14 +53,30 @@ The `/run` command:
 /run --stop      # Stop the loop
 ```
 
+### Install
+
+Clone the repo somewhere and export `LOOPWORK_DIR`:
+
+```bash
+git clone https://github.com/hammadtq/loopwork ~/loopwork
+echo 'export LOOPWORK_DIR=$HOME/loopwork' >> ~/.bashrc   # or ~/.zshrc
+```
+
+Then symlink the slash command into Claude Code:
+
+```bash
+mkdir -p ~/.claude/commands
+ln -sf "$LOOPWORK_DIR/.claude/commands/run.md" ~/.claude/commands/run.md
+```
+
 ### Manual usage
 
 You can also run the loop directly:
 
 ```bash
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/repo --auto    # Headless
-~/go/src/github.com/hammadtq/attach-dev/loopwork/run.sh /path/to/repo --status  # Status
-~/go/src/github.com/hammadtq/attach-dev/loopwork/lib/daemon.sh /path/to/repo start  # Background
+"$LOOPWORK_DIR/run.sh" /path/to/repo --auto    # Headless
+"$LOOPWORK_DIR/run.sh" /path/to/repo --status  # Status
+"$LOOPWORK_DIR/lib/daemon.sh" /path/to/repo start  # Background
 ```
 
 ### Steer mid-flight

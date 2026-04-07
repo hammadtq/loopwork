@@ -17,17 +17,34 @@ create_worktree() {
   local branch_name="item-${item_number}"
   local worktree_path="${WORKTREE_BASE}/${branch_name}"
 
-  # If worktree already exists, return its path
-  if [[ -d "$worktree_path" ]]; then
-    echo "$worktree_path"
-    return 0
-  fi
-
   cd "$REPO_DIR"
 
-  # Create branch from base if it doesn't exist
+  # Refresh base branch from origin so we are not branching from a stale local
+  # ref. Failure (e.g. no remote, offline) is non-fatal.
+  if git remote get-url origin >/dev/null 2>&1; then
+    git fetch origin "$base_branch" >/dev/null 2>&1 || true
+  fi
+
+  # If a worktree directory already exists, it is leftover from a previous
+  # attempt of the same item. Silently reusing it caused stale state to leak
+  # between iterations, so we clean it up and recreate from a fresh base.
+  if [[ -d "$worktree_path" ]]; then
+    echo "WARNING: Removing stale worktree from previous run: $worktree_path" >&2
+    git worktree remove "$worktree_path" --force >/dev/null 2>&1 || true
+    rm -rf "$worktree_path"
+    git worktree prune >/dev/null 2>&1 || true
+    git branch -D "$branch_name" >/dev/null 2>&1 || true
+  fi
+
+  # Create branch from base if it doesn't exist. Prefer origin/<base> when
+  # available so we always start from the freshest remote tip.
+  local base_ref="$base_branch"
+  if git show-ref --verify --quiet "refs/remotes/origin/${base_branch}"; then
+    base_ref="origin/${base_branch}"
+  fi
+
   if ! git show-ref --verify --quiet "refs/heads/${branch_name}"; then
-    git branch "$branch_name" "$base_branch"
+    git branch "$branch_name" "$base_ref"
   fi
 
   # Create worktree
@@ -124,10 +141,17 @@ check_overlap() {
 
     for new_dir in "${new_dirs[@]}"; do
       new_dir=$(echo "$new_dir" | xargs)
+      new_dir="${new_dir%/}"
+      [[ -z "$new_dir" ]] && continue
       for active_dir in "${active_dirs[@]}"; do
         active_dir=$(echo "$active_dir" | xargs)
-        # Check prefix overlap in either direction
-        if [[ "$new_dir" == ${active_dir}* || "$active_dir" == ${new_dir}* ]]; then
+        active_dir="${active_dir%/}"
+        [[ -z "$active_dir" ]] && continue
+        # Overlap if equal, or if either is a directory ancestor of the other
+        # (use '/' boundary so "src/api" does not match "src/apiary").
+        if [[ "$new_dir" == "$active_dir" || \
+              "$new_dir" == "${active_dir}/"* || \
+              "$active_dir" == "${new_dir}/"* ]]; then
           echo "OVERLAP:item-${item_num}:${active_dir}"
           return 1
         fi

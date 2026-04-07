@@ -43,6 +43,10 @@ MAX_ITERATIONS="${3:-5}"
 REVIEW_DIR="${WORK_DIR}/.loopwork-reviews"
 TIMEOUT="${WORKFLOW_TIMEOUT:-600}"
 
+# Capture the caller's CWD before any pushd/cd, so that bare `#N` refs can be
+# resolved against the user's current repo.
+CALLER_CWD="$(pwd)"
+
 # ─── Parse PR reference ──────────────────────────────────────────────────────
 parse_pr_ref() {
   local ref="$1"
@@ -56,6 +60,20 @@ parse_pr_ref() {
   else
     echo "ERROR: Cannot parse PR ref: $ref (expected owner/repo#N or #N)" >&2
     return 1
+  fi
+
+  # Resolve bare #N (no repo) by detecting the caller's current repo via gh.
+  # This must run BEFORE any cd into WORK_DIR (an empty work directory).
+  if [[ -z "$repo" ]]; then
+    if command -v gh &>/dev/null; then
+      repo=$(cd "$CALLER_CWD" 2>/dev/null && \
+        gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || true)
+    fi
+    if [[ -z "$repo" ]]; then
+      echo "ERROR: PR ref '$ref' has no owner/repo and current directory is not a GitHub repo." >&2
+      echo "       Run with owner/repo#$pr_number, or invoke from inside the target repo." >&2
+      return 1
+    fi
   fi
 
   echo "$repo" "$pr_number"
@@ -291,8 +309,13 @@ EOF
 
 # ─── Main loop ───────────────────────────────────────────────────────────────
 main() {
-  local repo pr_number
-  read -r repo pr_number <<< "$(parse_pr_ref "$PR_REF")"
+  local repo pr_number parsed
+  parsed=$(parse_pr_ref "$PR_REF") || return 1
+  read -r repo pr_number <<< "$parsed"
+  if [[ -z "$repo" || -z "$pr_number" ]]; then
+    echo "ERROR: Could not resolve PR reference '$PR_REF'" >&2
+    return 1
+  fi
 
   echo ""
   echo "┌─────────────────────────────────────────────────┐"
@@ -317,6 +340,7 @@ main() {
 
   local iteration=0
   local is_clean="false"
+  local reviewer_failed="false"
   local last_claude="" last_codex=""
 
   while [[ $iteration -lt $MAX_ITERATIONS ]]; do
@@ -346,6 +370,7 @@ main() {
     if [[ "${claude_size:-0}" -eq 0 && "${codex_size:-0}" -eq 0 ]]; then
       echo "  ERROR: Both reviews produced empty output — reviewers may have failed."
       echo "  Treating as failure, not clean pass."
+      reviewer_failed="true"
       break
     fi
     if [[ "${claude_size:-0}" -eq 0 ]]; then
@@ -409,6 +434,17 @@ main() {
   echo ""
   echo "  → Review the PR and merge when ready."
   echo "  → The loop has already moved on to the next item."
+
+  # Exit non-zero if reviewers failed or loop did not reach a clean state.
+  # Caller (run.sh) uses this to mark the item [blocked] instead of [x],
+  # which is critical for unattended (--auto) operation.
+  if [[ "$reviewer_failed" == "true" ]]; then
+    return 2
+  fi
+  if [[ "$is_clean" != "true" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 main

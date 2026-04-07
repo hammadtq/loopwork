@@ -394,30 +394,71 @@ ${item_failures}"
 
   popd > /dev/null
 
-  # Success — mark item done
-  bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "x"
-
-  # Log success
   local changed_files
   changed_files=$(cd "$worktree_path" && git diff --name-only "${BASE_BRANCH}...HEAD" 2>/dev/null | tr '\n' ', ')
-  bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "SUCCESS" \
-    "none" "N/A" "Completed successfully" "$changed_files"
 
-  echo "  Item #${item_number} complete!"
-  notify "$item_number" "$item_title" "SUCCESS"
-
-  # Create PR and run reviews (non-blocking)
-  if command -v gh &>/dev/null; then
-    echo "  Creating PR and running reviews..."
-    (
-      cd "$worktree_path"
-      bash "${LIB_DIR}/pr.sh" "$worktree_path" "$item_number" "$item_title" "$BASE_BRANCH"
-    ) &
-    BG_PIDS+=($!)
-    echo "  PR creation running in background (PID: ${BG_PIDS[-1]})"
+  # ─── Create PR + run review-fix gate (foreground, blocking) ────────────
+  # Build items are NOT marked [x] until review-fix.sh exits clean. This is
+  # required for unattended (--auto) mode: if reviewers fail or find unfixed
+  # critical issues, the item is marked [blocked] and the human can step in.
+  if ! command -v gh &>/dev/null; then
+    # No gh — fall back to legacy "mark done on commit" behavior so the loop
+    # is still usable locally without GitHub. Reviews will not gate.
+    echo "  WARNING: gh CLI missing — skipping PR creation and review gate."
+    bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "x"
+    bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "SUCCESS" \
+      "none" "N/A" "Completed (no PR/review — gh missing)" "$changed_files"
+    notify "$item_number" "$item_title" "SUCCESS"
+    echo "SUCCESS" > "$status_file"
+    return 0
   fi
 
-  echo "SUCCESS" > "$status_file"
+  echo "  Creating PR..."
+  local pr_output pr_url=""
+  pr_output=$(cd "$worktree_path" && \
+    bash "${LIB_DIR}/pr.sh" "$worktree_path" "$item_number" "$item_title" "$BASE_BRANCH" 2>&1) || true
+  pr_url=$(echo "$pr_output" | grep -oE 'https://github\.com/[^[:space:]]+/pull/[0-9]+' | tail -1)
+
+  if [[ -z "$pr_url" ]]; then
+    echo "  ERROR: PR creation failed. Output:"
+    echo "$pr_output" | sed 's/^/    /'
+    bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "blocked"
+    bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "FAILURE" \
+      "PR creation failed" "N/A" "gh pr create did not return a URL" "$changed_files"
+    notify "$item_number" "$item_title" "BLOCKED"
+    echo "FAILURE" > "$status_file"
+    return 0
+  fi
+
+  echo "  PR created: $pr_url"
+
+  # Parse PR URL into owner/repo#N for review-fix.sh
+  local pr_repo pr_num pr_ref
+  pr_repo=$(echo "$pr_url" | sed -E 's#https://github\.com/([^/]+/[^/]+)/pull/.*#\1#')
+  pr_num=$(echo "$pr_url"  | sed -E 's#.*/pull/([0-9]+).*#\1#')
+  pr_ref="${pr_repo}#${pr_num}"
+
+  echo "  Running review-fix gate against ${pr_ref}..."
+  local review_workdir="${WORKFLOW_DIR}/review-${item_number}"
+  mkdir -p "$review_workdir"
+
+  if bash "${LIB_DIR}/review-fix.sh" "$pr_ref" "$review_workdir" 5; then
+    bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "x"
+    bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "SUCCESS" \
+      "none" "N/A" "Built and review-fix passed for $pr_ref" "$changed_files"
+    echo "  Item #${item_number} complete (review-fix clean)"
+    notify "$item_number" "$item_title" "SUCCESS"
+    echo "SUCCESS" > "$status_file"
+  else
+    bash "${LIB_DIR}/parse-plan.sh" "$PLAN_FILE" mark "$item_number" "blocked"
+    bash "${LIB_DIR}/evolve.sh" "$REPO_DIR" log "$item_number" "$item_title" "FAILURE" \
+      "Review-fix did not reach a clean state" "N/A" \
+      "PR $pr_ref needs human review — see PR comment" "$changed_files"
+    echo "  Item #${item_number} BLOCKED — review-fix could not reach clean state"
+    echo "  See: $pr_url"
+    notify "$item_number" "$item_title" "BLOCKED"
+    echo "FAILURE" > "$status_file"
+  fi
   return 0
 }
 

@@ -21,6 +21,10 @@ get_changed_files() {
 }
 
 # ─── Check if a file is within allowed scope ────────────────────────────────
+# A file matches a pattern when:
+#   - file == pattern (exact file match), OR
+#   - file is inside pattern as a directory (boundary on '/')
+# This prevents scope "src/api" from accidentally matching "src/apiary".
 file_in_scope() {
   local file="$1"
   local scope="$2"
@@ -30,14 +34,14 @@ file_in_scope() {
     return 0
   fi
 
-  # Check each allowed directory/file pattern
   IFS=',' read -ra patterns <<< "$scope"
   for pattern in "${patterns[@]}"; do
     pattern=$(echo "$pattern" | xargs)  # trim whitespace
     [[ -z "$pattern" ]] && continue
+    # Normalize: drop a trailing slash so "src/api/" and "src/api" behave the same
+    pattern="${pattern%/}"
 
-    # If file starts with the pattern (directory match)
-    if [[ "$file" == ${pattern}* ]]; then
+    if [[ "$file" == "$pattern" || "$file" == "${pattern}/"* ]]; then
       return 0
     fi
   done
@@ -56,14 +60,10 @@ file_is_forbidden() {
   for pattern in "${patterns[@]}"; do
     pattern=$(echo "$pattern" | xargs)
     [[ -z "$pattern" ]] && continue
+    pattern="${pattern%/}"
 
-    # Exact match (for files like .env)
-    if [[ "$file" == "$pattern" ]]; then
-      return 0
-    fi
-
-    # Directory prefix match
-    if [[ "$file" == ${pattern}* ]]; then
+    # Exact file match OR directory containment with '/' boundary.
+    if [[ "$file" == "$pattern" || "$file" == "${pattern}/"* ]]; then
       return 0
     fi
   done
